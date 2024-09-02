@@ -15,9 +15,9 @@ class Server:
         """
         Handle SIGTERM signal so the server close gracefully.
         """
-        logging.info("action: handle_signal | signal: SIGTERM | result: in_progress")
+        # logging.info("action: handle_signal | signal: SIGTERM | result: in_progress")
         self._server_socket.close()
-        logging.info("action: handle_signal | signal: SIGTERM | result: success")
+        # logging.info("action: handle_signal | signal: SIGTERM | result: success")
 
     def run(self):
         """
