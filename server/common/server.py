@@ -9,30 +9,20 @@ from common.package import Package, MAX_STR_SIZE_BYTES, MAX_NUMBER_SIZE_BYTES, M
 def recv_data(socket):
     data_packet_size = bytearray()
     data = bytearray()
-    i = 1
-    logging.debug(f'recibo el tamanio del paquete')
     while len(data_packet_size) < 1:
-        logging.debug(f'empiezo a recibir data, vuelta {i}')
         packet = socket.recv(1)
-        logging.debug(f'recibi data {packet.hex()}, vuelta {i}')
         if not packet:
             # ver que hacer aca
             break  # EOF o conexión cerrada
         data_packet_size += packet
-        i += 1
     
     package_size = int.from_bytes(data_packet_size, 'big')
-    i = 1
-    logging.debug(f'recibo el paquete')
     while len(data) < package_size:
-        logging.debug(f'empiezo a recibir data, vuelta {i}')
         packet = socket.recv(package_size)
-        logging.debug(f'recibi data {packet.hex()}, vuelta {i}')
         if not packet:
             # ver que hacer aca
             break  # EOF o conexión cerrada
         data += packet
-        i += 1
     
     return data
 

@@ -43,10 +43,6 @@ func NewClient(config ClientConfig) *Client {
 func sendPackage(c *Client, p *Package) error {
 	bpackage := p.Serialize()
 	var dataBuffer bytes.Buffer
-	log.Infof(" PAQUETE: %x\ncant de bytes del paquete en decimal: %v\ncant de bytes del paquete en bytes: %x",
-		bpackage,
-		len(bpackage),
-		byte(len(bpackage)))
 	dataBuffer.WriteByte(byte(len(bpackage)))
 	dataBuffer.Write(bpackage)
 	data := dataBuffer.Bytes()
@@ -145,7 +141,6 @@ func (c *Client) StartClientLoop() {
 			c.createClientSocket()
 
 			// TODO: Modify the send to avoid short-write
-			// hacer el paquete con las variables de entorno
 			name := os.Getenv("NOMBRE")
 			lastname := os.Getenv("APELLIDO")
 			documentStr := os.Getenv("DOCUMENTO")
@@ -153,51 +148,14 @@ func (c *Client) StartClientLoop() {
 			numberStr := os.Getenv("NUMERO")
 
 			document64, _ := strconv.ParseUint(documentStr, 10, 32)
-			// Convertir a uint32
 			document := uint32(document64)
 
 			number64, _ := strconv.ParseUint(numberStr, 10, 16)
-			// Convertir a uint16
 			number := uint16(number64)
 
-			log.Infof(
-				"Tomo todas las variables de entorno | client_id: %v",
-				c.config.ID,
-			)
-
 			p := NewPackage(name, lastname, document, birthday, number)
-			log.Infof(
-				"Armo el paquete | client_id: %v",
-				c.config.ID,
-			)
-			// mandar el paquete controlando el short-write
 			sendPackage(c, p)
-			// esperar la confirmación
-			// recibir la confirmacion
-			// logguear el caso de exito
 			expectResponse(c, p)
-
-			// fmt.Fprintf(
-			// 	c.conn,
-			// 	"[CLIENT %v] Message N°%v\n",
-			// 	c.config.ID,
-			// 	msgID,
-			// )
-			// msg, err := bufio.NewReader(c.conn).ReadString('\n')
-			// c.conn.Close()
-
-			// if err != nil {
-			// 	log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-			// 		c.config.ID,
-			// 		err,
-			// 	)
-			// 	return
-			// }
-
-			// log.Infof("action: receive_message | result: success | client_id: %v | msg: %v",
-			// 	c.config.ID,
-			// 	msg,
-			// )
 
 			// Wait a time between sending one message and the next one
 			time.Sleep(c.config.LoopPeriod)
