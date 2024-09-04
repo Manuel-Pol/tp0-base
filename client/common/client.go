@@ -1,13 +1,12 @@
 package common
 
 import (
-	"bufio"
-	"fmt"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+	"strconv"
 
 	"github.com/op/go-logging"
 )
@@ -35,6 +34,59 @@ func NewClient(config ClientConfig) *Client {
 		config: config,
 	}
 	return client
+}
+
+// SendPackage Send the package controlling no short-writing occurs.
+// In case of failure, error is printed in stdout/stderr and exit 1
+// is returned
+func sendPackage(c *Client, p *Package) error {
+	data := p.Serialize()
+	// ===== responsabilidad de capa de comunicacion =====
+	bytesSent := 0
+    for bytesSent < len(data) {
+        n, err := c.conn.Write(data[bytesSent:])
+        if err != nil {
+            log.Criticalf(
+				"action: send_package | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
+        }
+        bytesSent += n
+    }
+	// ===== responsabilidad de capa de comunicacion =====
+    return nil
+}
+
+func expectResponse(c *Client, p *Package) error {
+	// ===== responsabilidad de capa de comunicacion =====
+	var response [1]byte
+    _, err := c.conn.Read(response[:])
+    if err != nil {
+        log.Criticalf(
+			"action: receive_message | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+    }
+	// ===== responsabilidad de capa de comunicacion =====
+
+
+	log.Infof("action: receive_message | result: success | client_id: %v",
+				c.config.ID,
+			)
+	if response[0] == 0 {
+		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
+				p.Document,
+				p.Number,
+			)
+	} else {
+		log.Infof("action: apuesta_enviada | result: fail | dni: %v | numero: %v",
+				p.Document,
+				p.Number,
+			)
+	}
+    return nil
 }
 
 // CreateClientSocket Initializes client socket. In case of
@@ -76,27 +128,50 @@ func (c *Client) StartClientLoop() {
 			c.createClientSocket()
 
 			// TODO: Modify the send to avoid short-write
-			fmt.Fprintf(
-				c.conn,
-				"[CLIENT %v] Message N°%v\n",
-				c.config.ID,
-				msgID,
-			)
-			msg, err := bufio.NewReader(c.conn).ReadString('\n')
-			c.conn.Close()
+			// hacer el paquete con las variables de entorno
+			name := os.Getenv("NOMBRE")
+			lastname := os.Getenv("APELLIDO")
+			document := os.Getenv("DOCUMENTO")
+			birthdayStr := os.Getenv("NACIMIENTO")
+			numberStr := os.Getenv("NUMERO")
 
-			if err != nil {
-				log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-					c.config.ID,
-					err,
-				)
-				return
-			}
+			birthday64, _ := strconv.ParseUint(birthdayStr, 10, 32)
+			// Convertir a uint32
+			birthday := uint32(birthday64)
 
-			log.Infof("action: receive_message | result: success | client_id: %v | msg: %v",
-				c.config.ID,
-				msg,
-			)
+			number64, _ := strconv.ParseUint(numberStr, 10, 16)
+			// Convertir a uint16
+			number := uint16(number64)
+
+			p := NewPackage(name, lastname, document, birthday, number)
+			// mandar el paquete controlando el short-write
+			sendPackage(c, p)
+			// esperar la confirmación
+			// recibir la confirmacion
+			// logguear el caso de exito
+			expectResponse(c, p)
+
+			// fmt.Fprintf(
+			// 	c.conn,
+			// 	"[CLIENT %v] Message N°%v\n",
+			// 	c.config.ID,
+			// 	msgID,
+			// )
+			// msg, err := bufio.NewReader(c.conn).ReadString('\n')
+			// c.conn.Close()
+
+			// if err != nil {
+			// 	log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
+			// 		c.config.ID,
+			// 		err,
+			// 	)
+			// 	return
+			// }
+
+			// log.Infof("action: receive_message | result: success | client_id: %v | msg: %v",
+			// 	c.config.ID,
+			// 	msg,
+			// )
 
 			// Wait a time between sending one message and the next one
 			time.Sleep(c.config.LoopPeriod)
