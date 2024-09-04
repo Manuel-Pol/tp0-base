@@ -19,7 +19,7 @@ type Package struct {
 	Number    uint16
 }
 
-func NewPackage(name string, lastname string, birthday string, document uint32, number uint16) *Package {
+func NewPackage(name string, lastname string, document uint32, birthday string, number uint16) *Package {
 	return &Package{
 		Name:     name,
 		LastName: lastname,
@@ -43,8 +43,15 @@ func (p *Package) Serialize() []byte {
 	buffer.Write(blastName)
 
 	binary.Write(&buffer, binary.BigEndian, p.Document)
+	bdocument := make([]byte, 4)
+	binary.BigEndian.PutUint32(bdocument, p.Document)
+	log.Infof("El documento en bytes: %v", bdocument)
 
 	bbirthday := []byte(p.Birthday)
+	log.Infof("El nacimiento en bytes: %v", bbirthday)
+	bbirthdaySize := byte(len(bbirthday))
+	log.Infof("El el tamanio del nacimiento en bytes: %v", bbirthdaySize)
+	buffer.WriteByte(bbirthdaySize)
 	buffer.Write(bbirthday)
 
 	binary.Write(&buffer, binary.BigEndian, p.Number)

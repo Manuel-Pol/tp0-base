@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 	"strconv"
+	"bytes"
 
 	"github.com/op/go-logging"
 )
@@ -40,7 +41,15 @@ func NewClient(config ClientConfig) *Client {
 // In case of failure, error is printed in stdout/stderr and exit 1
 // is returned
 func sendPackage(c *Client, p *Package) error {
-	data := p.Serialize()
+	bpackage := p.Serialize()
+	var dataBuffer bytes.Buffer
+	log.Infof(" PAQUETE: %x\ncant de bytes del paquete en decimal: %v\ncant de bytes del paquete en bytes: %x",
+		bpackage,
+		len(bpackage),
+		byte(len(bpackage)))
+	dataBuffer.WriteByte(byte(len(bpackage)))
+	dataBuffer.Write(bpackage)
+	data := dataBuffer.Bytes()
 	// ===== responsabilidad de capa de comunicacion =====
 	bytesSent := 0
     for bytesSent < len(data) {
@@ -55,6 +64,10 @@ func sendPackage(c *Client, p *Package) error {
         bytesSent += n
     }
 	// ===== responsabilidad de capa de comunicacion =====
+	log.Infof(
+		"action: send_package | result: success | client_id: %v",
+		c.config.ID,
+	)
     return nil
 }
 
@@ -102,6 +115,10 @@ func (c *Client) createClientSocket() error {
 		)
 	}
 	c.conn = conn
+	log.Infof(
+		"action: connect | result: success | client_id: %v",
+		c.config.ID,
+	)
 	return nil
 }
 
@@ -131,19 +148,28 @@ func (c *Client) StartClientLoop() {
 			// hacer el paquete con las variables de entorno
 			name := os.Getenv("NOMBRE")
 			lastname := os.Getenv("APELLIDO")
-			document := os.Getenv("DOCUMENTO")
-			birthdayStr := os.Getenv("NACIMIENTO")
+			documentStr := os.Getenv("DOCUMENTO")
+			birthday := os.Getenv("NACIMIENTO")
 			numberStr := os.Getenv("NUMERO")
 
-			birthday64, _ := strconv.ParseUint(birthdayStr, 10, 32)
+			document64, _ := strconv.ParseUint(documentStr, 10, 32)
 			// Convertir a uint32
-			birthday := uint32(birthday64)
+			document := uint32(document64)
 
 			number64, _ := strconv.ParseUint(numberStr, 10, 16)
 			// Convertir a uint16
 			number := uint16(number64)
 
+			log.Infof(
+				"Tomo todas las variables de entorno | client_id: %v",
+				c.config.ID,
+			)
+
 			p := NewPackage(name, lastname, document, birthday, number)
+			log.Infof(
+				"Armo el paquete | client_id: %v",
+				c.config.ID,
+			)
 			// mandar el paquete controlando el short-write
 			sendPackage(c, p)
 			// esperar la confirmación

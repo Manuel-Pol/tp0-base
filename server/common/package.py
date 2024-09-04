@@ -27,7 +27,7 @@ class Package:
 
         return bname_size + bname + blastname_size + blastname + bdocument + bbirthday_size + bbirthday + bnumber
     
-    def deserialize(self, data: bytes) -> 'Package':
+    def deserialize(data: bytes) -> 'Package':
         init, finish = 0, MAX_STR_SIZE_BYTES
         bname_size = int.from_bytes(data[init:finish], 'big')
         

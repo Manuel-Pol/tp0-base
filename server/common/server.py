@@ -7,22 +7,34 @@ from common.utils import Bet, store_bets
 from common.package import Package, MAX_STR_SIZE_BYTES, MAX_NUMBER_SIZE_BYTES, MAX_IDENTITY_SIZE_BYTES
 
 def recv_data(socket):
-    data_size = bytearray()
+    data_packet_size = bytearray()
     data = bytearray()
-    while len(data_size) < 2:
-        packet = socket.recv(2)
+    i = 1
+    logging.debug(f'recibo el tamanio del paquete')
+    while len(data_packet_size) < 1:
+        logging.debug(f'empiezo a recibir data, vuelta {i}')
+        packet = socket.recv(1)
+        logging.debug(f'recibi data {packet.hex()}, vuelta {i}')
         if not packet:
             # ver que hacer aca
             break  # EOF o conexión cerrada
-        data += packet
+        data_packet_size += packet
+        i += 1
     
-    package_size = int.from_bytes(data_size, 'big')
+    package_size = int.from_bytes(data_packet_size, 'big')
+    i = 1
+    logging.debug(f'recibo el paquete')
     while len(data) < package_size:
+        logging.debug(f'empiezo a recibir data, vuelta {i}')
         packet = socket.recv(package_size)
+        logging.debug(f'recibi data {packet.hex()}, vuelta {i}')
         if not packet:
             # ver que hacer aca
             break  # EOF o conexión cerrada
         data += packet
+        i += 1
+    
+    return data
 
 
 def send_data(socket):
@@ -41,9 +53,9 @@ class Server:
         """
         Handle SIGTERM signal so the server close gracefully.
         """
-        # logging.info("action: handle_signal | signal: SIGTERM | result: in_progress")
+        logging.info("action: handle_signal | signal: SIGTERM | result: in_progress")
         self._server_socket.close()
-        # logging.info("action: handle_signal | signal: SIGTERM | result: success")
+        logging.info("action: handle_signal | signal: SIGTERM | result: success")
 
     def run(self):
         """
@@ -75,11 +87,14 @@ class Server:
         """
         try:
             # TODO: Modify the receive to avoid short-reads
+            logging.info(f'action: receive_message | result: in_progress')
             data = recv_data(client_sock)
+            logging.info(f'action: deserialize_pkg | result: in_progress')
             package = Package.deserialize(data)
+            logging.info(f'action: deserialize_pkg | result: success')
             addr = client_sock.getpeername()
             logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {package}')
-            bet = Bet(addr[0], package.name, package.lastname, str(package.document), package.birthday, str(package.number))
+            bet = Bet("1", package.name, package.lastname, str(package.document), package.birthday, str(package.number))
             store_bets([bet])
             logging.info(f'action: apuesta_almacenada | result: success | dni: {package.document} | numero: {package.number}')
             # msg = client_sock.recv(1024).rstrip().decode('utf-8')

@@ -103,6 +103,12 @@ func main() {
 	// Print program config with debugging purposes
 	PrintConfig(v)
 
+	os.Setenv("NOMBRE", "Santiago Lionel")
+	os.Setenv("APELLIDO", "Lorca")
+	os.Setenv("DOCUMENTO", "30904465")
+	os.Setenv("NACIMIENTO", "1999-03-17")
+	os.Setenv("NUMERO", "7574")
+
 	clientConfig := common.ClientConfig{
 		ServerAddress: v.GetString("server.address"),
 		ID:            v.GetString("id"),
