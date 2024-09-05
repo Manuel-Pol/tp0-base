@@ -4,30 +4,23 @@ import signal
 import sys
 import logging
 from common.utils import Bet, store_bets
-from common.package import Package, MAX_STR_SIZE_BYTES, MAX_NUMBER_SIZE_BYTES, MAX_IDENTITY_SIZE_BYTES
+from common.bet_package import BetPackage
+from common.bet_header import BetHeader
 
-def recv_data(socket):
-    data_packet_size = bytearray()
-    data = bytearray()
-    while len(data_packet_size) < 1:
-        packet = socket.recv(1)
-        if not packet:
-            # ver que hacer aca
-            break  # EOF o conexión cerrada
-        data_packet_size += packet
+def recv_bets(socket):
+    bet_header = BetHeader.deserialize(socket)
+    logging.debug(f'BET_HEADER {bet_header}')
+    bets = []
+    for _ in range(int(bet_header.amount_bets)):
+        bet_package = BetPackage.deserialize(socket)
+        logging.debug(f'BET {bet_package}')
+        bet = Bet(bet_header.agency, bet_package.name, bet_package.lastname, bet_package.document, bet_package.birthday, bet_package.number)
+        bets.append(bet)
     
-    package_size = int.from_bytes(data_packet_size, 'big')
-    while len(data) < package_size:
-        packet = socket.recv(package_size)
-        if not packet:
-            # ver que hacer aca
-            break  # EOF o conexión cerrada
-        data += packet
-    
-    return data
+    return bet_header, bets
 
 
-def send_data(socket):
+def send_confirmation(socket):
     num = 0
     data = num.to_bytes(1, 'big')
     socket.sendall(data)
@@ -77,19 +70,16 @@ class Server:
         """
         try:
             # TODO: Modify the receive to avoid short-reads
-            logging.info(f'action: receive_message | result: in_progress')
-            data = recv_data(client_sock)
-            logging.info(f'action: deserialize_pkg | result: in_progress')
-            package = Package.deserialize(data)
-            logging.info(f'action: deserialize_pkg | result: success')
             addr = client_sock.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {package}')
-            bet = Bet("1", package.name, package.lastname, str(package.document), package.birthday, str(package.number))
-            store_bets([bet])
-            logging.info(f'action: apuesta_almacenada | result: success | dni: {package.document} | numero: {package.number}')
+            logging.info(f'action: receive_message | result: in_progress')
+            bet_header, bets = recv_bets(client_sock)
+            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {bet_header}')
+            store_bets(bets)
+            for bet in bets:
+                logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
             # msg = client_sock.recv(1024).rstrip().decode('utf-8')
             # TODO: Modify the send to avoid short-writes
-            send_data(client_sock)
+            send_confirmation(client_sock)
             # client_sock.send("{}\n".format(msg).encode('utf-8'))
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")

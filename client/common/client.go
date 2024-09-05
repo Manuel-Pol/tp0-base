@@ -6,7 +6,6 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"strconv"
 	"bytes"
 
 	"github.com/op/go-logging"
@@ -40,11 +39,15 @@ func NewClient(config ClientConfig) *Client {
 // SendPackage Send the package controlling no short-writing occurs.
 // In case of failure, error is printed in stdout/stderr and exit 1
 // is returned
-func sendPackage(c *Client, p *Package) error {
-	bpackage := p.Serialize()
+func sendBetPackage(c *Client, p *BetPackage, h *BetHeader) error {
+	bbetHeader := h.Serialize()
+	log.Infof(" HEADER: %x", bbetHeader)
+	bbetPackage := p.Serialize()
+	log.Infof(" PAQUETE: %x", bbetPackage)
+	
 	var dataBuffer bytes.Buffer
-	dataBuffer.WriteByte(byte(len(bpackage)))
-	dataBuffer.Write(bpackage)
+	dataBuffer.Write(bbetHeader)
+	dataBuffer.Write(bbetPackage)
 	data := dataBuffer.Bytes()
 	// ===== responsabilidad de capa de comunicacion =====
 	bytesSent := 0
@@ -67,7 +70,7 @@ func sendPackage(c *Client, p *Package) error {
     return nil
 }
 
-func expectResponse(c *Client, p *Package) error {
+func expectResponse(c *Client, p *BetPackage) error {
 	// ===== responsabilidad de capa de comunicacion =====
 	var response [1]byte
     _, err := c.conn.Read(response[:])
@@ -95,6 +98,7 @@ func expectResponse(c *Client, p *Package) error {
 				p.Number,
 			)
 	}
+	c.conn.Close()
     return nil
 }
 
@@ -143,18 +147,14 @@ func (c *Client) StartClientLoop() {
 			// TODO: Modify the send to avoid short-write
 			name := os.Getenv("NOMBRE")
 			lastname := os.Getenv("APELLIDO")
-			documentStr := os.Getenv("DOCUMENTO")
+			document := os.Getenv("DOCUMENTO")
 			birthday := os.Getenv("NACIMIENTO")
-			numberStr := os.Getenv("NUMERO")
+			number := os.Getenv("NUMERO")
 
-			document64, _ := strconv.ParseUint(documentStr, 10, 32)
-			document := uint32(document64)
+			p := NewBetPackage(name, lastname, document, birthday, number)
 
-			number64, _ := strconv.ParseUint(numberStr, 10, 16)
-			number := uint16(number64)
-
-			p := NewPackage(name, lastname, document, birthday, number)
-			sendPackage(c, p)
+			h := NewBetHeader(c.config.ID, "1")
+			sendBetPackage(c, p, h)
 			expectResponse(c, p)
 
 			// Wait a time between sending one message and the next one

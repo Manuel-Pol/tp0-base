@@ -2,25 +2,18 @@ package common
 
 import (
 	"bytes"
-	"encoding/binary"
 )
 
-const (
-	MAX_STR_SIZE_BYTES     = 1
-	MAX_IDENTITY_SIZE_BYTES = 4
-	MAX_NUMBER_SIZE_BYTES  = 2
-)
-
-type Package struct {
+type BetPackage struct {
 	Name      string
 	LastName  string
-	Document  uint32
+	Document  string
 	Birthday  string
-	Number    uint16
+	Number    string
 }
 
-func NewPackage(name string, lastname string, document uint32, birthday string, number uint16) *Package {
-	return &Package{
+func NewBetPackage(name string, lastname string, document string, birthday string, number string) *BetPackage {
+	return &BetPackage{
 		Name:     name,
 		LastName: lastname,
 		Document: document,
@@ -29,7 +22,7 @@ func NewPackage(name string, lastname string, document uint32, birthday string, 
 	}
 }
 
-func (p *Package) Serialize() []byte {
+func (p *BetPackage) Serialize() []byte {
 	var buffer bytes.Buffer
 
 	bname := []byte(p.Name)
@@ -42,16 +35,20 @@ func (p *Package) Serialize() []byte {
 	buffer.WriteByte(blastNameSize)
 	buffer.Write(blastName)
 
-	binary.Write(&buffer, binary.BigEndian, p.Document)
-	bdocument := make([]byte, 4)
-	binary.BigEndian.PutUint32(bdocument, p.Document)
+	bdocument := []byte(p.Document)
+	bdocumentSize := byte(len(bdocument))
+	buffer.WriteByte(bdocumentSize)
+	buffer.Write(bdocument)
 
 	bbirthday := []byte(p.Birthday)
 	bbirthdaySize := byte(len(bbirthday))
 	buffer.WriteByte(bbirthdaySize)
 	buffer.Write(bbirthday)
 
-	binary.Write(&buffer, binary.BigEndian, p.Number)
+	bnumber := []byte(p.Number)
+	bnumberSize := byte(len(bnumber))
+	buffer.WriteByte(bnumberSize)
+	buffer.Write(bnumber)
 
 	return buffer.Bytes()
 }
