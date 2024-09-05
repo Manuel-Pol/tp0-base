@@ -79,6 +79,7 @@ func sendBetPackages(c *Client, betPackages []*BetPackage) error {
 				c.config.ID,
 				err,
 			)
+			return err
         }
         bytesSent += n
     }
@@ -112,7 +113,6 @@ func expectResponse(c *Client) error {
 	} else {
 		log.Infof("action: apuesta_enviada | result: fail")
 	}
-	c.conn.Close()
     return nil
 }
 
@@ -127,6 +127,7 @@ func (c *Client) createClientSocket() error {
 			c.config.ID,
 			err,
 		)
+		return err
 	}
 	c.conn = conn
 	// log.Infof(
@@ -137,7 +138,6 @@ func (c *Client) createClientSocket() error {
 	}
 
 func notifyServer(c *Client) error {
-	c.createClientSocket()
 
 	var dataBuffer bytes.Buffer
 	dataBuffer.WriteByte(byte(NO_MORE_BETS))
@@ -158,16 +158,15 @@ func notifyServer(c *Client) error {
 				c.config.ID,
 				err,
 			)
+			return err
 		}
 		bytesSent += n
 	}
 
-	c.conn.Close()
 	return nil
 }
 
 func expectWinners(c *Client) error {
-	c.createClientSocket()
 
 	var dataBuffer bytes.Buffer
 	dataBuffer.WriteByte(byte(CONSULT_WINNER))
@@ -188,6 +187,7 @@ func expectWinners(c *Client) error {
 				c.config.ID,
 				err,
 			)
+			return err
 		}
 		bytesSent += n
 	}
@@ -208,7 +208,6 @@ func expectWinners(c *Client) error {
 		num,
 	)
 
-	c.conn.Close()
 	return nil
 }
 	
@@ -228,6 +227,9 @@ func (c *Client) StartClientLoop() {
 	}
 	defer file.Close()
 	reader := csv.NewReader(file)
+	
+	// Create the connection the server in every loop iteration. Send an
+	c.createClientSocket()
 
 	bets_left := true
 	amount_conns := 0
@@ -279,9 +281,6 @@ func (c *Client) StartClientLoop() {
 		if !bets_left && len(betPackages) == 0 {
 			break
 		}
-			
-		// Create the connection the server in every loop iteration. Send an
-		c.createClientSocket()
 
 		largo := len(betPackages)
 
@@ -299,5 +298,6 @@ func (c *Client) StartClientLoop() {
 	notifyServer(c)
 	expectWinners(c)
 
+	c.conn.Close()
 	log.Infof("Se mandaron %v bets en %v conecciones", c.amounts_bets, amount_conns)
 }

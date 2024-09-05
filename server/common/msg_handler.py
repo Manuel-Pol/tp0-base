@@ -3,8 +3,10 @@ from common.bet_package import BetPackage
 from common.utils import Bet
 from common.safe_sockets import safe_read
 from enum import Enum
+import logging
 
 CLIENT_ID_SIZE = 1
+MSG_TYPE_SIZE = 1
 
 class MsgType(Enum):
     SUCCESS = 0
@@ -15,7 +17,7 @@ class MsgType(Enum):
     WINNERS = 5
 
 def recv_message(socket):
-    msg_type_data = safe_read(socket, 1) #global
+    msg_type_data = safe_read(socket, MSG_TYPE_SIZE)
     msg_type = int.from_bytes(msg_type_data, 'big')
     return process_msg(msg_type, socket)
 
@@ -25,7 +27,6 @@ def process_msg(type, socket):
     except ValueError:
         print("No existe ningún tipo para ese valor")
         return
-    # globales
     if type == MsgType.SUCCESS:
         return (None, None)
     if type == MsgType.FAIL:

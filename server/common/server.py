@@ -1,11 +1,13 @@
 import socket
 import logging
 import signal
-import sys
 import logging
+import os
+from multiprocessing import Process, Queue, Pipe, Lock
 from common.utils import Bet, store_bets, load_bets, has_won
 from common.msg_handler import MsgType, recv_message, send_winners
 
+AMOUNT_AGENCIES = 5
 
 def send_confirmation(socket):
     confirmation = MsgType.SUCCESS
@@ -18,17 +20,29 @@ class Server:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
-        self.agencies_finished = {}
-        self.waiting_agencies = {}
-        self.bets_amount = 0
+        self.childs = []
+        self.queue = Queue()
+        self.pipes = []
+        self.lock = Lock()
+        self.agencies = {}
+        self.clean = False
 
     def _handle_sigterm(self, sig, frame):
         """
         Handle SIGTERM signal so the server close gracefully.
         """
+        if not self.clean:
+            self.clean_up()
         logging.info("action: handle_signal | signal: SIGTERM | result: in_progress")
         self._server_socket.close()
         logging.info("action: handle_signal | signal: SIGTERM | result: success")
+
+    def clean_up(self):
+        for child_process, child_conn in self.agencies.values():
+            child_conn.close()
+            child_process.join()
+        logging.debug(f"[Proceso {os.getpid()}] Se cerraron los extremos de pipes de proceso principal, tambien se joinearon los procesos")
+        self.clean = True
 
     def run(self):
         """
@@ -44,44 +58,54 @@ class Server:
 
         signal.signal(signal.SIGTERM, self._handle_sigterm)
 
-        i = 0
         while True:
             try:
                 client_sock = self.__accept_new_connection()
-                self.__handle_client_connection(client_sock)
-                i += 1
-                if 10000 <= self.bets_amount <= 14000 or 26000 <= self.bets_amount <= 30000 or 46000 <= self.bets_amount <= 50000 or 66000 <= self.bets_amount <= 69459:
-                    logging.debug(f"Se guardaron {self.bets_amount} bets con {i} conecciones")
+                parent_conn, child_conn = Pipe()
+
+                child_process = Process(
+                    target=self.__handle_client_connection,
+                    args=(client_sock, self.lock, self.queue, child_conn)
+                )
+
+                child_process.start()
+                self.agencies[len(self.agencies)+1] = (child_process, parent_conn)
+
+                if len(self.agencies) >= AMOUNT_AGENCIES:
+                    self.wait_for_processes_to_finish()
+                    # se buscan los ganadores y se envian
+                    self.get_winners()
+                    self.clean_up()
+                
             except OSError as error:
                 break
 
-    def __handle_client_connection(self, client_sock):
+    def __handle_client_connection(self, client_sock, lock, queue, conn):
         """
         Read message from a specific client socket and closes the socket
 
         If a problem arises in the communication with the client, the
         client socket will also be closed
         """
+        # logging.debug("Entre al handle_client")
         try:
-            # TODO: Modify the receive to avoid short-reads
-            # logging.info(f'action: receive_message | result: in_progress')
-            msg_type, data = recv_message(client_sock)
-            if msg_type == MsgType.BETS:
-                bet_header, bets = data
-                self.process_bets(bet_header, bets, client_sock)
-            elif msg_type == MsgType.NO_MORE_BETS:
-                if data in self.agencies_finished:
-                    self.agencies_finished[data] = True
-            elif msg_type == MsgType.CONSULT_WINNER:
-                if data not in self.waiting_agencies:
-                    self.waiting_agencies[data] = client_sock
-                if self.all_agencies_finished():
-                    self.get_winners()
-                return
+            while True:
+                # logging.info(f'action: receive_message | result: in_progress')
+                msg_type, data = recv_message(client_sock)
+                if msg_type == MsgType.BETS:
+                    bet_header, bets = data
+                    self.handle_bets(bet_header, bets, client_sock, lock)
+                elif msg_type == MsgType.NO_MORE_BETS:
+                    continue
+                elif msg_type == MsgType.CONSULT_WINNER:
+                    self.handle_consult(client_sock, data, conn, queue)
+                    break
         except OSError as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")
-        
-        client_sock.close()
+        finally:
+            logging.debug(f"[Proceso {os.getpid()}] Cierro el socket del cliente y mi extremo del pipe")
+            client_sock.close()
+            conn.close()
 
     def __accept_new_connection(self):
         """
@@ -97,33 +121,37 @@ class Server:
         # logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
 
-    def process_bets(self, bet_header, bets, client_sock):
+    def handle_bets(self, bet_header, bets, client_sock, lock):
         addr = client_sock.getpeername()
         # logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {bet_header}')
-        store_bets(bets)
-        if not bet_header.agency in self.agencies_finished:
-            self.agencies_finished[bet_header.agency] = False
-        self.bets_amount += len(bets)
-        # for bet in bets:
-        #     logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
+        with lock:
+            store_bets(bets)
         send_confirmation(client_sock)
 
     def get_winners(self):
         winner_bets = {}
-        for bet in load_bets():
-            if has_won(bet):
-                winner_bets[bet.agency] = winner_bets.get(bet.agency, 0) + 1
+        with self.lock:
+            for bet in load_bets():
+                if has_won(bet):
+                    winner_bets[bet.agency] = winner_bets.get(bet.agency, 0) + 1
 
-        for agency, conn in self.waiting_agencies.items():
-            winner_bets[int(agency)] = winner_bets.get(int(agency), 0)
-            amount_winners = winner_bets[int(agency)]
-            send_winners(conn, amount_winners)
-            conn.close()
+        for agency, info in self.agencies.items():
+            _, parent_conn = info 
+            winner_bets[agency] = winner_bets.get(agency, 0)
+            amount_winners = winner_bets[agency]
+            parent_conn.send_bytes(amount_winners.to_bytes(1, 'big'))
 
         logging.info(f'action: sorteo | result: success')
 
-    def all_agencies_finished(self):
-        for finished in self.agencies_finished.values():
-            if not finished:
-                return False
-        return True
+    def wait_for_processes_to_finish(self):
+        for _ in range(AMOUNT_AGENCIES):
+            self.queue.get()
+
+    def handle_consult(self, socket, agency, conn, queue):
+        # logging.debug("Entre al handle_consult")
+        queue.put(agency)
+
+        bamount_winners = conn.recv_bytes(1)
+        amount_winners = int.from_bytes(bamount_winners, 'big')
+
+        send_winners(socket, amount_winners)
