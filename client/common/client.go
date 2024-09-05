@@ -15,6 +15,15 @@ import (
 
 var log = logging.MustGetLogger("log")
 
+const (
+	SUCCESS = 0
+	FAIL = 1
+	BETS = 2
+	NO_MORE_BETS = 3
+	CONSULT_WINNER = 4
+	WINNERS = 5
+)
+
 // ClientConfig Configuration used by the client
 type ClientConfig struct {
 	ID              string
@@ -46,6 +55,7 @@ func NewClient(config ClientConfig) *Client {
 // is returned
 func sendBetPackages(c *Client, betPackages []*BetPackage) error {
 	var dataBuffer bytes.Buffer
+	dataBuffer.WriteByte(byte(BETS))
 
 	h := NewBetHeader(c.config.ID, fmt.Sprintf("%d", len(betPackages)))
 	bbetHeader := h.Serialize()
@@ -120,12 +130,88 @@ func (c *Client) createClientSocket() error {
 	}
 	c.conn = conn
 	// log.Infof(
-	// 	"action: connect | result: success | client_id: %v",
-	// 	c.config.ID,
-	// )
+		// 	"action: connect | result: success | client_id: %v",
+		// 	c.config.ID,
+		// )
+		return nil
+	}
+
+func notifyServer(c *Client) error {
+	c.createClientSocket()
+
+	var dataBuffer bytes.Buffer
+	dataBuffer.WriteByte(byte(NO_MORE_BETS))
+
+	bid := []byte(c.config.ID)
+	bidSize := byte(len(bid))
+	dataBuffer.WriteByte(bidSize)
+	dataBuffer.Write(bid)
+
+	data := dataBuffer.Bytes()
+	bytesSent := 0
+
+	for bytesSent < len(data){
+		n, err := c.conn.Write(data[bytesSent:])
+		if err != nil {
+			log.Criticalf(
+				"action: send_package | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
+		}
+		bytesSent += n
+	}
+
+	c.conn.Close()
 	return nil
 }
 
+func expectWinners(c *Client) error {
+	c.createClientSocket()
+
+	var dataBuffer bytes.Buffer
+	dataBuffer.WriteByte(byte(CONSULT_WINNER))
+
+	bid := []byte(c.config.ID)
+	bidSize := byte(len(bid))
+	dataBuffer.WriteByte(bidSize)
+	dataBuffer.Write(bid)
+
+	data := dataBuffer.Bytes()
+	bytesSent := 0
+
+	for bytesSent < len(data){
+		n, err := c.conn.Write(data[bytesSent:])
+		if err != nil {
+			log.Criticalf(
+				"action: send_package | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
+		}
+		bytesSent += n
+	}
+
+	var response [2]byte
+	_, err := c.conn.Read(response[:])
+	if err != nil {
+		log.Criticalf(
+			"action: receive_message | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+	}
+
+	num := response[1]
+	log.Infof(
+		"action: consulta_ganadores | result: success | cant_ganadores: %v",
+		num,
+	)
+
+	c.conn.Close()
+	return nil
+}
+	
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop() {
 
@@ -208,7 +294,10 @@ func (c *Client) StartClientLoop() {
 		time.Sleep(c.config.LoopPeriod)
 		amount_conns++
 	}
-
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+
+	notifyServer(c)
+	expectWinners(c)
+
 	log.Infof("Se mandaron %v bets en %v conecciones", c.amounts_bets, amount_conns)
 }

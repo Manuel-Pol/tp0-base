@@ -3,26 +3,13 @@ import logging
 import signal
 import sys
 import logging
-from common.utils import Bet, store_bets
-from common.bet_package import BetPackage
-from common.bet_header import BetHeader
-
-def recv_bets(socket):
-    bet_header = BetHeader.deserialize(socket)
-    # logging.debug(f'BET_HEADER {bet_header}')
-    bets = []
-    for _ in range(int(bet_header.amount_bets)):
-        bet_package = BetPackage.deserialize(socket)
-        # logging.debug(f'BET {bet_package}')
-        bet = Bet(bet_header.agency, bet_package.name, bet_package.lastname, bet_package.document, bet_package.birthday, bet_package.number)
-        bets.append(bet)
-    
-    return bet_header, bets
+from common.utils import Bet, store_bets, load_bets, has_won
+from common.msg_handler import MsgType, recv_message, send_winners
 
 
 def send_confirmation(socket):
-    num = 0
-    data = num.to_bytes(1, 'big')
+    confirmation = MsgType.SUCCESS
+    data = confirmation.value.to_bytes(1, 'big')
     socket.sendall(data)
 
 class Server:
@@ -31,6 +18,8 @@ class Server:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
+        self.agencies_finished = {}
+        self.waiting_agencies = {}
         self.bets_amount = 0
 
     def _handle_sigterm(self, sig, frame):
@@ -61,7 +50,7 @@ class Server:
                 client_sock = self.__accept_new_connection()
                 self.__handle_client_connection(client_sock)
                 i += 1
-                if self.bets_amount == 10000 or self.bets_amount == 26000 or self.bets_amount == 50000 or self.bets_amount == 69459:
+                if 10000 <= self.bets_amount <= 14000 or 26000 <= self.bets_amount <= 30000 or 46000 <= self.bets_amount <= 50000 or 66000 <= self.bets_amount <= 69459:
                     logging.debug(f"Se guardaron {self.bets_amount} bets con {i} conecciones")
             except OSError as error:
                 break
@@ -75,22 +64,24 @@ class Server:
         """
         try:
             # TODO: Modify the receive to avoid short-reads
-            addr = client_sock.getpeername()
             # logging.info(f'action: receive_message | result: in_progress')
-            bet_header, bets = recv_bets(client_sock)
-            # logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {bet_header}')
-            store_bets(bets)
-            self.bets_amount += len(bets)
-            # for bet in bets:
-            #     logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
-            # msg = client_sock.recv(1024).rstrip().decode('utf-8')
-            # TODO: Modify the send to avoid short-writes
-            send_confirmation(client_sock)
-            # client_sock.send("{}\n".format(msg).encode('utf-8'))
+            msg_type, data = recv_message(client_sock)
+            if msg_type == MsgType.BETS:
+                bet_header, bets = data
+                self.process_bets(bet_header, bets, client_sock)
+            elif msg_type == MsgType.NO_MORE_BETS:
+                if data in self.agencies_finished:
+                    self.agencies_finished[data] = True
+            elif msg_type == MsgType.CONSULT_WINNER:
+                if data not in self.waiting_agencies:
+                    self.waiting_agencies[data] = client_sock
+                if self.all_agencies_finished():
+                    self.get_winners()
+                return
         except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
-        finally:
-            client_sock.close()
+            logging.error(f"action: receive_message | result: fail | error: {e}")
+        
+        client_sock.close()
 
     def __accept_new_connection(self):
         """
@@ -105,3 +96,34 @@ class Server:
         c, addr = self._server_socket.accept()
         # logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
+
+    def process_bets(self, bet_header, bets, client_sock):
+        addr = client_sock.getpeername()
+        # logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {bet_header}')
+        store_bets(bets)
+        if not bet_header.agency in self.agencies_finished:
+            self.agencies_finished[bet_header.agency] = False
+        self.bets_amount += len(bets)
+        # for bet in bets:
+        #     logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
+        send_confirmation(client_sock)
+
+    def get_winners(self):
+        winner_bets = {}
+        for bet in load_bets():
+            if has_won(bet):
+                winner_bets[bet.agency] = winner_bets.get(bet.agency, 0) + 1
+
+        for agency, conn in self.waiting_agencies.items():
+            winner_bets[int(agency)] = winner_bets.get(int(agency), 0)
+            amount_winners = winner_bets[int(agency)]
+            send_winners(conn, amount_winners)
+            conn.close()
+
+        logging.info(f'action: sorteo | result: success')
+
+    def all_agencies_finished(self):
+        for finished in self.agencies_finished.values():
+            if not finished:
+                return False
+        return True
