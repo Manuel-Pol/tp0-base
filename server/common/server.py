@@ -33,15 +33,12 @@ class Server:
         """
         if not self.clean:
             self.clean_up()
-        logging.info("action: handle_signal | signal: SIGTERM | result: in_progress")
         self._server_socket.close()
-        logging.info("action: handle_signal | signal: SIGTERM | result: success")
 
     def clean_up(self):
         for child_process, child_conn in self.agencies.values():
             child_conn.close()
             child_process.join()
-        logging.debug(f"[Proceso {os.getpid()}] Se cerraron los extremos de pipes de proceso principal, tambien se joinearon los procesos")
         self.clean = True
 
     def run(self):
@@ -73,7 +70,6 @@ class Server:
 
                 if len(self.agencies) >= AMOUNT_AGENCIES:
                     self.wait_for_processes_to_finish()
-                    # se buscan los ganadores y se envian
                     self.get_winners()
                     self.clean_up()
                 
@@ -87,10 +83,9 @@ class Server:
         If a problem arises in the communication with the client, the
         client socket will also be closed
         """
-        # logging.debug("Entre al handle_client")
         try:
             while True:
-                # logging.info(f'action: receive_message | result: in_progress')
+                logging.info(f'action: receive_message | result: in_progress')
                 msg_type, data = recv_message(client_sock)
                 if msg_type == MsgType.BETS:
                     bet_header, bets = data
@@ -103,7 +98,6 @@ class Server:
         except OSError as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")
         finally:
-            logging.debug(f"[Proceso {os.getpid()}] Cierro el socket del cliente y mi extremo del pipe")
             client_sock.close()
             conn.close()
 
@@ -116,14 +110,13 @@ class Server:
         """
 
         # Connection arrived
-        # logging.info('action: accept_connections | result: in_progress')
+        logging.info('action: accept_connections | result: in_progress')
         c, addr = self._server_socket.accept()
-        # logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
+        logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
 
     def handle_bets(self, bet_header, bets, client_sock, lock):
         addr = client_sock.getpeername()
-        # logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {bet_header}')
         with lock:
             store_bets(bets)
         send_confirmation(client_sock)
@@ -148,7 +141,6 @@ class Server:
             self.queue.get()
 
     def handle_consult(self, socket, agency, conn, queue):
-        # logging.debug("Entre al handle_consult")
         queue.put(agency)
 
         bamount_winners = conn.recv_bytes(1)

@@ -42,11 +42,9 @@ def process_msg(type, socket):
     
 def recv_bets(socket):
     bet_header = BetHeader.deserialize(socket)
-    # logging.debug(f'BET_HEADER {bet_header}')
     bets = []
     for _ in range(int(bet_header.amount_bets)):
         bet_package = BetPackage.deserialize(socket)
-        # logging.debug(f'BET {bet_package}')
         bet = Bet(bet_header.agency, bet_package.name, bet_package.lastname, bet_package.document, bet_package.birthday, bet_package.number)
         bets.append(bet)
     
