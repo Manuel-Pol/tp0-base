@@ -49,17 +49,14 @@ func sendBetPackages(c *Client, betPackages []*BetPackage) error {
 
 	h := NewBetHeader(c.config.ID, fmt.Sprintf("%d", len(betPackages)))
 	bbetHeader := h.Serialize()
-	// log.Infof(" HEADER: %x", bbetHeader)
 	dataBuffer.Write(bbetHeader)
 
 	for _, p := range betPackages {
 		bbetPackage := p.Serialize()
 		dataBuffer.Write(bbetPackage)
 	}
-	// log.Infof(" PAQUETE: %x", bbetPackage)
 	
 	data := dataBuffer.Bytes()
-	// ===== responsabilidad de capa de comunicacion =====
 	bytesSent := 0
     for bytesSent < len(data) {
         n, err := c.conn.Write(data[bytesSent:])
@@ -72,16 +69,14 @@ func sendBetPackages(c *Client, betPackages []*BetPackage) error {
         }
         bytesSent += n
     }
-	// ===== responsabilidad de capa de comunicacion =====
-	// log.Infof(
-	// 	"action: send_package | result: success | client_id: %v",
-	// 	c.config.ID,
-	// )
+	log.Infof(
+		"action: send_package | result: success | client_id: %v",
+		c.config.ID,
+	)
     return nil
 }
 
 func expectResponse(c *Client) error {
-	// ===== responsabilidad de capa de comunicacion =====
 	var response [1]byte
     _, err := c.conn.Read(response[:])
     if err != nil {
@@ -91,14 +86,13 @@ func expectResponse(c *Client) error {
 			err,
 		)
     }
-	// ===== responsabilidad de capa de comunicacion =====
 
 
-	// log.Infof("action: receive_message | result: success | client_id: %v",
-	// 			c.config.ID,
-	// 		)
+	log.Infof("action: receive_message | result: success | client_id: %v",
+				c.config.ID,
+			)
 	if response[0] == 0 {
-		// log.Infof("action: apuesta_enviada | result: success")
+		log.Infof("action: apuesta_enviada | result: success")
 	} else {
 		log.Infof("action: apuesta_enviada | result: fail")
 	}
@@ -119,10 +113,10 @@ func (c *Client) createClientSocket() error {
 		)
 	}
 	c.conn = conn
-	// log.Infof(
-	// 	"action: connect | result: success | client_id: %v",
-	// 	c.config.ID,
-	// )
+	log.Infof(
+		"action: connect | result: success | client_id: %v",
+		c.config.ID,
+	)
 	return nil
 }
 
@@ -137,7 +131,6 @@ func (c *Client) StartClientLoop() {
 	filePath := fmt.Sprintf("/dataset/agency-%v.csv", c.config.ID)
 	file, err := os.Open(filePath)
 	if err != nil {
-		// return nil, fmt.Errorf("could not open file %s: %v", filePath, err)
 		log.Criticalf("could not open file %s: %v", filePath, err)
 	}
 	defer file.Close()
@@ -152,11 +145,9 @@ func (c *Client) StartClientLoop() {
 			select {
 			case <-sigChan:
 				// Se recibió la senial SIGTERM, cerrar el cliente de manera graceful
-				// log.Infof("action: shutdown | result: in_progress | client_id: %v", c.config.ID)
 				if c.conn != nil {
 					c.conn.Close()
 				}
-				// log.Infof("action: shutdown | result: success | client_id: %v", c.config.ID)
 				return
 			default:
 				// TODO: Modify the send to avoid short-write
@@ -164,10 +155,6 @@ func (c *Client) StartClientLoop() {
 				record, err := reader.Read()
 				if err != nil {
 					if err.Error() == "EOF" {
-						// log.Infof(
-						// 	"action: reading_bets | result: success | client_id: %v",
-						// 	c.config.ID,
-						// )
 						bets_left = false
 						break
 						} else {
@@ -210,5 +197,4 @@ func (c *Client) StartClientLoop() {
 	}
 
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
-	log.Infof("Se mandaron %v bets en %v conecciones", c.amounts_bets, amount_conns)
 }

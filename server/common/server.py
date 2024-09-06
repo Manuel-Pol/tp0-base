@@ -2,18 +2,15 @@ import socket
 import logging
 import signal
 import sys
-import logging
 from common.utils import Bet, store_bets
 from common.bet_package import BetPackage
 from common.bet_header import BetHeader
 
 def recv_bets(socket):
     bet_header = BetHeader.deserialize(socket)
-    # logging.debug(f'BET_HEADER {bet_header}')
     bets = []
     for _ in range(int(bet_header.amount_bets)):
         bet_package = BetPackage.deserialize(socket)
-        # logging.debug(f'BET {bet_package}')
         bet = Bet(bet_header.agency, bet_package.name, bet_package.lastname, bet_package.document, bet_package.birthday, bet_package.number)
         bets.append(bet)
     
@@ -37,9 +34,7 @@ class Server:
         """
         Handle SIGTERM signal so the server close gracefully.
         """
-        logging.info("action: handle_signal | signal: SIGTERM | result: in_progress")
         self._server_socket.close()
-        logging.info("action: handle_signal | signal: SIGTERM | result: success")
 
     def run(self):
         """
@@ -55,14 +50,10 @@ class Server:
 
         signal.signal(signal.SIGTERM, self._handle_sigterm)
 
-        i = 0
         while True:
             try:
                 client_sock = self.__accept_new_connection()
                 self.__handle_client_connection(client_sock)
-                i += 1
-                if self.bets_amount == 10000 or self.bets_amount == 26000 or self.bets_amount == 50000 or self.bets_amount == 69459:
-                    logging.debug(f"Se guardaron {self.bets_amount} bets con {i} conecciones")
             except OSError as error:
                 break
 
@@ -76,17 +67,13 @@ class Server:
         try:
             # TODO: Modify the receive to avoid short-reads
             addr = client_sock.getpeername()
-            # logging.info(f'action: receive_message | result: in_progress')
+            logging.info(f'action: receive_message | result: in_progress')
             bet_header, bets = recv_bets(client_sock)
-            # logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {bet_header}')
+            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {bet_header}')
             store_bets(bets)
             self.bets_amount += len(bets)
-            # for bet in bets:
-            #     logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
-            # msg = client_sock.recv(1024).rstrip().decode('utf-8')
             # TODO: Modify the send to avoid short-writes
             send_confirmation(client_sock)
-            # client_sock.send("{}\n".format(msg).encode('utf-8'))
         except OSError as e:
             logging.error("action: receive_message | result: fail | error: {e}")
         finally:
@@ -101,7 +88,5 @@ class Server:
         """
 
         # Connection arrived
-        # logging.info('action: accept_connections | result: in_progress')
         c, addr = self._server_socket.accept()
-        # logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c

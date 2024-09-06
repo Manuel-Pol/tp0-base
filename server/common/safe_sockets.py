@@ -3,8 +3,7 @@ def safe_read(socket, n_bytes):
     while len(data) < n_bytes:
         packet = socket.recv(n_bytes)
         if not packet:
-            # ver que hacer aca
-            break  # EOF o conexión cerrada
+            break
         data += packet
     return data
 
