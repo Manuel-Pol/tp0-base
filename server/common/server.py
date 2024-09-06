@@ -2,7 +2,6 @@ import socket
 import logging
 import signal
 import sys
-import logging
 from common.utils import Bet, store_bets, load_bets, has_won
 from common.msg_handler import MsgType, recv_message, send_winners
 
@@ -26,9 +25,7 @@ class Server:
         """
         Handle SIGTERM signal so the server close gracefully.
         """
-        logging.info("action: handle_signal | signal: SIGTERM | result: in_progress")
         self._server_socket.close()
-        logging.info("action: handle_signal | signal: SIGTERM | result: success")
 
     def run(self):
         """
@@ -64,7 +61,7 @@ class Server:
         """
         try:
             # TODO: Modify the receive to avoid short-reads
-            # logging.info(f'action: receive_message | result: in_progress')
+            logging.info(f'action: receive_message | result: in_progress')
             msg_type, data = recv_message(client_sock)
             if msg_type == MsgType.BETS:
                 bet_header, bets = data
@@ -92,20 +89,17 @@ class Server:
         """
 
         # Connection arrived
-        # logging.info('action: accept_connections | result: in_progress')
+        logging.info('action: accept_connections | result: in_progress')
         c, addr = self._server_socket.accept()
-        # logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
+        logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
 
     def process_bets(self, bet_header, bets, client_sock):
         addr = client_sock.getpeername()
-        # logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {bet_header}')
         store_bets(bets)
         if not bet_header.agency in self.agencies_finished:
             self.agencies_finished[bet_header.agency] = False
         self.bets_amount += len(bets)
-        # for bet in bets:
-        #     logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
         send_confirmation(client_sock)
 
     def get_winners(self):
